@@ -8,7 +8,7 @@ Spatial-domain identification is a central task in spatial transcriptomics, yet 
   <img src="assets/model_architecture.png" width="900" alt="TRUST-ST framework overview">
 </p>
 
-This release contains only the reusable model implementation for reliability-guided consensus clustering. Dataset-specific runners, preprocessing scripts, benchmark notebooks, plotting utilities, and ablation execution code are intentionally excluded.
+This release contains only the reusable model implementation for reliability-guided consensus clustering. Dataset-specific runners, preprocessing scripts, benchmark notebooks, plotting utilities, and experimental analysis code are intentionally excluded.
 
 ## Requirements
 
@@ -84,18 +84,6 @@ labels, affinity, diagnostics = model.fit(
 - **Adaptive Consensus Gate** uses reliability dispersion and base conflict to decide how strongly reliability-weighted evidence should revise the plain co-association matrix.
 - **Consensus Assignment** converts the gated affinity matrix into spatial-domain labels using average-linkage agglomerative clustering.
 - **Conservative Spatial Refinement** corrects only low-confidence assignments when strong local neighborhood agreement supports the reassignment.
-
-## Ablation Variants
-
-The implementation exposes the standard component ablations used for analysis:
-
-```python
-from trustst import TRUSTSTConsensus
-
-variants = TRUSTSTConsensus.ablation_variants()
-```
-
-The returned variants are `Full TRUST-ST`, `w/o Method Decorrelation`, `w/o Cluster Reliability`, `w/o Adaptive Consensus Gate`, and `w/o Spatial Refinement`.
 
 ## License
 
