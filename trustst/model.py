@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from typing import Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 from sklearn.cluster import AgglomerativeClustering
@@ -303,16 +303,8 @@ class TRUSTSTConsensus:
     def __init__(
         self,
         config: Optional[TRUSTSTConfig] = None,
-        use_method_decorrelation: bool = True,
-        use_cluster_reliability: bool = True,
-        use_adaptive_consensus_gate: bool = True,
-        use_spatial_refinement: bool = True,
     ) -> None:
         self.config = config or TRUSTSTConfig()
-        self.use_method_decorrelation = use_method_decorrelation
-        self.use_cluster_reliability = use_cluster_reliability
-        self.use_adaptive_consensus_gate = use_adaptive_consensus_gate
-        self.use_spatial_refinement = use_spatial_refinement
 
         self.labels_: Optional[np.ndarray] = None
         self.affinity_: Optional[np.ndarray] = None
@@ -338,25 +330,16 @@ class TRUSTSTConsensus:
 
         plain_affinity = plain_coassociation_matrix(partitions)
 
-        if self.use_method_decorrelation:
-            method_weights, method_similarity, raw_decorrelation_scores = method_decorrelation(
-                partitions,
-                ridge=self.config.decorrelation_ridge,
-                alpha=self.config.decorrelation_alpha,
-            )
-        else:
-            method_weights = np.full(n_methods, 1.0 / n_methods, dtype=float)
-            method_similarity = np.eye(n_methods, dtype=float)
-            raw_decorrelation_scores = np.ones(n_methods, dtype=float)
+        method_weights, method_similarity, raw_decorrelation_scores = method_decorrelation(
+            partitions,
+            ridge=self.config.decorrelation_ridge,
+            alpha=self.config.decorrelation_alpha,
+        )
 
-        if self.use_cluster_reliability:
-            spot_reliability, unit_reliability = cluster_reliability(
-                partitions,
-                theta=self.config.cluster_reliability_theta,
-            )
-        else:
-            spot_reliability = np.ones((n_methods, len(partitions[0])), dtype=float)
-            unit_reliability = {}
+        spot_reliability, unit_reliability = cluster_reliability(
+            partitions,
+            theta=self.config.cluster_reliability_theta,
+        )
 
         weighted_affinity = reliability_weighted_affinity(
             partitions,
@@ -364,31 +347,16 @@ class TRUSTSTConsensus:
             spot_reliability,
         )
 
-        if self.use_adaptive_consensus_gate:
-            gate = adaptive_consensus_gate(spot_reliability, plain_affinity)
-            final_affinity = gated_affinity(plain_affinity, weighted_affinity, gate)
-            mean_gate = float(gate.mean())
-        else:
-            gate = np.ones_like(plain_affinity)
-            final_affinity = weighted_affinity
-            mean_gate = None
-
+        gate = adaptive_consensus_gate(spot_reliability, plain_affinity)
+        final_affinity = gated_affinity(plain_affinity, weighted_affinity, gate)
         consensus_labels = consensus_assignment(final_affinity, n_clusters)
 
-        if self.use_spatial_refinement:
-            final_labels, refinement = conservative_spatial_refinement(
-                consensus_labels,
-                final_affinity,
-                coordinates,
-                self.config,
-            )
-        else:
-            final_labels = consensus_labels
-            refinement = {
-                "candidate_fraction": 0.0,
-                "changed_fraction": 0.0,
-                "mean_affinity_confidence": float(affinity_confidence(final_affinity).mean()),
-            }
+        final_labels, refinement = conservative_spatial_refinement(
+            consensus_labels,
+            final_affinity,
+            coordinates,
+            self.config,
+        )
 
         mean_similarity = float(
             (method_similarity.sum() - n_methods) / max(n_methods * (n_methods - 1), 1)
@@ -400,7 +368,7 @@ class TRUSTSTConsensus:
             "raw_decorrelation_scores": raw_decorrelation_scores.tolist(),
             "mean_method_similarity": mean_similarity,
             "mean_cluster_reliability": float(spot_reliability.mean()),
-            "mean_adaptive_gate": mean_gate,
+            "mean_adaptive_gate": float(gate.mean()),
             "n_cluster_units": len(unit_reliability),
             "refinement": refinement,
         }
@@ -409,29 +377,3 @@ class TRUSTSTConsensus:
         self.affinity_ = final_affinity
         self.diagnostics_ = diagnostics
         return final_labels, final_affinity, diagnostics
-
-    @classmethod
-    def ablation_variants(
-        cls,
-        config: Optional[TRUSTSTConfig] = None,
-    ) -> Mapping[str, "TRUSTSTConsensus"]:
-        """Return the full model and the standard component ablations."""
-        return {
-            "Full TRUST-ST": cls(config=config),
-            "w/o Method Decorrelation": cls(
-                config=config,
-                use_method_decorrelation=False,
-            ),
-            "w/o Cluster Reliability": cls(
-                config=config,
-                use_cluster_reliability=False,
-            ),
-            "w/o Adaptive Consensus Gate": cls(
-                config=config,
-                use_adaptive_consensus_gate=False,
-            ),
-            "w/o Spatial Refinement": cls(
-                config=config,
-                use_spatial_refinement=False,
-            ),
-        }
